@@ -3,12 +3,13 @@ const express = require('express')
 const mongoose = require('mongoose')
 const resolvers = require('./graphql/resolvers/index')
 const schema = require('./graphql/schemas/index')
+const auth = require('./middlewares/auth')
 const { graphqlHTTP } = require('express-graphql')
 
 require('dotenv').config()
 const app = express()
 app.use(bodyParser.json())
-
+app.use(auth)
 
 
 app.use('/graphql',

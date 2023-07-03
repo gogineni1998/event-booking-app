@@ -1,18 +1,15 @@
 const bcrypt = require('bcrypt')
+const jwt = require('jsonwebtoken')
 const Event = require('../../models/events')
 const User = require('../../models/users')
 const Booking = require('../../models/booking')
 
-const eventList = async (events) => {
-    const eventDetails = await Event.find({
-        _id: { $in: events }
-    })
-    return eventDetails
-}
+require('dotenv').config()
 
 const user = async (userId) => {
     const userDetails = await User.findOne({ _id: userId })
-    return { ...userDetails._doc, createdEvents: await eventList(userDetails._doc.createdEvents) }
+    const result = { ...userDetails}
+    return result._doc
 }
 
 const event = async (eventId) => {
@@ -23,6 +20,22 @@ const event = async (eventId) => {
 }
 
 module.exports = {
+    login: async ({ userInput }) => {
+        try {
+            const findUser = await User.findOne({ email: userInput.email })
+            if (findUser == null) {
+                throw new Error('Email not Found')
+            }
+            const checkUser = bcrypt.compare(findUser.password, userInput.password)
+            if (checkUser == false) {
+                throw new Error('Password is incorrect')
+            }
+            const token = jwt.sign({ _id: findUser._id, email: findUser.email }, process.env.SECURE_KEY)
+            return { _id: findUser._id, email: findUser.email, token: token }
+        } catch (error) {
+            throw error
+        }
+    },
     events: async () => {
         try {
             const events = await Event.find()
@@ -30,21 +43,20 @@ module.exports = {
                 ...event._doc,
                 creator: await user.bind(this, event._doc.creator._id)
             })))
-            console.log(promises);
             return promises
         } catch (error) {
             console.log(error);
             return error
         }
     },
-    bookings : async () => {
+    bookings: async () => {
         try {
             const fetchedBookings = await Booking.find()
-            const result = await Promise.all(fetchedBookings.map( fetchedBooking => {
+            const result = await Promise.all(fetchedBookings.map(fetchedBooking => {
                 return ({
                     ...fetchedBooking._doc,
-                    event :  event(fetchedBooking.event),
-                    user :  user(fetchedBooking.user)
+                    event: event(fetchedBooking.event),
+                    user: user(fetchedBooking.user)
                 })
             }))
             return result
@@ -52,23 +64,27 @@ module.exports = {
             throw error
         }
     },
-    createEvent: async ({ eventInput }) => {
+    createEvent: async ({ eventInput }, req) => {
         try {
+            if (req.loggedIn == false) {
+                throw new Error('User Not LoggedIn')
+            }
             const event = new Event({
                 title: eventInput.title,
                 description: eventInput.description,
                 price: +eventInput.price,
                 date: new Date(eventInput.date),
-                creator: '649d4619bb0a7f9ae6a508d7'
+                creator: req.user_data._id
             })
             const doc = await event.save()
             await User.updateOne(
-                { _id: doc._doc.creator },
+                { _id: doc.creator },
                 {
-                    $push: { createdEvents: doc._doc._id }
+                    $push: { createdEvents: doc._id }
                 }
             )
-            return doc._doc
+            const result = {...doc}
+            return result._doc
         } catch (error) {
             console.log(error);
             return error
@@ -93,11 +109,14 @@ module.exports = {
             throw error
         }
     },
-    bookEvent: async (args) => {
+    bookEvent: async (args, req) => {
         try {
+            if (req.loggedIn == false) {
+                throw new Error('User Not LoggedIn')
+            }
             const book = new Booking({
                 event: args.eventId,
-                user: '649d4619bb0a7f9ae6a508d7'
+                user: req.user_data._id
             })
             const bookedEvent = await book.save()
             return { ...bookedEvent._doc, user: user(bookedEvent._doc.user), event: event(bookedEvent._doc.event) }
@@ -105,11 +124,14 @@ module.exports = {
             throw error
         }
     },
-    cancelEvent: async (args) => {
+    cancelEvent: async (args, req) => {
         try {
-            const booking = await Booking.findOne({_id : args.bookingId})
+            if (req.loggedIn == false) {
+                throw new Error('User Not LoggedIn')
+            }
+            const booking = await Booking.findOne({ _id: args.bookingId })
             const eventDetails = await event(booking._doc.event)
-            await Booking.findOneAndRemove({_id : args.bookingId})
+            await Booking.findOneAndRemove({ _id: args.bookingId })
             return eventDetails
         } catch (error) {
             throw error
