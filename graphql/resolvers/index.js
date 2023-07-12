@@ -8,7 +8,7 @@ require('dotenv').config()
 
 const user = async (userId) => {
     const userDetails = await User.findOne({ _id: userId })
-    const result = { ...userDetails}
+    const result = { ...userDetails }
     return result._doc
 }
 
@@ -23,11 +23,11 @@ module.exports = {
     login: async ({ userInput }) => {
         try {
             const findUser = await User.findOne({ email: userInput.email })
-            if (findUser == null) {
+            if (findUser === null) {
                 throw new Error('Email not Found')
             }
-            const checkUser = bcrypt.compare(findUser.password, userInput.password)
-            if (checkUser == false) {
+            const checkUser = await bcrypt.compare(userInput.password, findUser.password)
+            if (checkUser === false) {
                 throw new Error('Password is incorrect')
             }
             const token = jwt.sign({ _id: findUser._id, email: findUser.email }, process.env.SECURE_KEY)
@@ -83,7 +83,7 @@ module.exports = {
                     $push: { createdEvents: doc._id }
                 }
             )
-            const result = {...doc}
+            const result = { ...doc }
             return result._doc
         } catch (error) {
             console.log(error);
